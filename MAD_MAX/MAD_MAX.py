@@ -7,16 +7,19 @@ from statsmodels.robust.scale import mad as statsmodels_mad
 VERSION = '16.03.11'
 NAME = 'MAD_MAX'
 descr = """
-This program can be used in detecting areas of high and low coverage
+This program can be used in detecting areas of "too" high and low coverage
 in BAM files. The parameter -m sets the number of Median Absolute Deviations
 that the coverage is allowed to differ from median (default 3). The input file
-is a coverage file created with "bedtools genomecov" (0-based site numbering
-is expected, i.e. the default behavior of genomecov). The input file defines
-coverage data for each site of a bam file. By default coverage values of 0
-are included, but they can be omitted by using defining "-z false".
-Output is a bed file containing filtered areas. NOTICE that reference genomes
-may contain areas that should be omitted from analysis. -b parameter may be
-used to define areas to leave out from MAD analysis.
+is a coverage file created with "bedtools genomecov" (1-based site numbering
+is expected). The input file defines coverage data for each site of a bam
+file. NOTICE that parameter -d should be included in the bedtools genomecov
+command line to report depth at each genome position. The correct input file
+format contains three columns: scaffold name, position and depth. By default
+MAD_MAX includes coverage values of 0, but they can be omitted by using
+defining "-z false". Output is a bed file containing filtered areas. NOTICE
+that as reference genomes may contain areas that should be omitted from
+analysis (repetitive sequence etc.), the -b parameter may be used to define
+areas to omit from MAD analysis.
 """
 
 print '\nRunning {0} v.{1}'.format(NAME, VERSION)
@@ -74,11 +77,17 @@ def BED_coverage_filter(in_path, out_path, MAD_max, include_zeros, omit_bed):
     in_handle = open(in_path)
     print '\nReading depth information...'
     depth_values = []
+    i = 0
     for line in in_handle:
+        i += 1
         line = line.strip()
         if not line: continue
         line = line.split('\t')
-        if len(line) != 3: continue
+        if len(line) < 3: continue
+        if len(line) > 3:
+            print 'Error! Input coverage file should have 3 columns, found {0}' \
+                  ' on line {1}'.format(len(line), i)
+            sys.exit(0)
         if line[2] == '0' and not include_zeros:
             continue
         if line[0] + '_' + str(int(line[1])-1) in omit_sites:
@@ -86,7 +95,7 @@ def BED_coverage_filter(in_path, out_path, MAD_max, include_zeros, omit_bed):
         depth_values.append(int(line[2]))
     if len(depth_values) == 0:
         print 'Error! No depth values found! Check the input file format!'
-        sys.exit(1)
+        sys.exit(0)
     print '{0} depth values found.'.format(len(depth_values))
 
     print '\nCalculating minimum & maximum coverage...'
@@ -113,7 +122,7 @@ def BED_coverage_filter(in_path, out_path, MAD_max, include_zeros, omit_bed):
         if line[1] == '0':
             print 'Error! Position information should starts from 1, not 0! ' \
                   'Check file:\n{0}'.format(in_path)
-            sys.exit(1)
+            sys.exit(0)
         line[1] = int(line[1])-1
 
         #Is line in a new scaffold, in omit_bed or does it contain gaps
@@ -130,7 +139,7 @@ def BED_coverage_filter(in_path, out_path, MAD_max, include_zeros, omit_bed):
                 print 'Check the input file format! Obsolete bedtools ' \
                       'versions contain bug that may omit areas when using ' \
                       'genomecov!'
-                sys.exit(1)
+                sys.exit(0)
                 #bed_out_lines.append('\t'.join(map(str, ongoing_BED_interval)))
                 #ongoing_BED_interval = None
         #Is the coverage within allowed limits or not:
