@@ -133,7 +133,7 @@ def BED_coverage_filter(in_path, out_path, MAD_max, include_zeros, omit_bed):
         elif ongoing_BED_interval is not None and current_scaffold != line[0]:
             bed_out_lines.append('\t'.join(map(str, ongoing_BED_interval)))
             ongoing_BED_interval = None
-        elif ongoing_BED_interval is not None and (prev_site + 1) != line[1]:
+        elif ongoing_BED_interval is not None and (prev_site + 1) != line[1] and include_zeros:
                 print 'Error! There is a gap in the input coverage data just ' \
                       'before the following line:\n{0}'.format(line)
                 print 'Check the input file format! Obsolete bedtools ' \
