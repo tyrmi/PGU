@@ -2,7 +2,7 @@ import optparse
 import sys
 from copy import deepcopy
 
-VERSION = '16.11.11'
+VERSION = '17.03.24'
 NAME = 'pm_estimatic'
 descr = """
 This program estimates the average probability of misorientation per site,
@@ -98,7 +98,7 @@ def pm_estimatic(in_path, ancestral_genotypes_path, out_path):
     doublemutation_transversion_count = 0.0
     i = 1
     for line in in_handle:
-        if line.startswith('##'): continue
+        if line.startswith('#'): continue
         line = line.strip()
         if not line: continue
         line = line.split('\t')
@@ -216,7 +216,7 @@ def pm_estimatic(in_path, ancestral_genotypes_path, out_path):
     out_lines = ['{0} {1}\n'.format(NAME, VERSION)]
     out_lines.append('\nUsing options:')
     out_lines.append('-i ' + in_path)
-    out_lines.append('-a' + ancestral_genotypes_path)
+    out_lines.append('-a' + str(ancestral_genotypes_path))
     out_lines.append('-o' + out_path)
     out_lines.append('\nSites included in analysis:\t{0}'.format(monomorphic_sites +
                                                                  polymorphic_sites_and_fixed_diff_no_doublemutations +
