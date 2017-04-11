@@ -12,8 +12,7 @@ SLURM_1.txt to SLURM (3) edit and submit SLURM_2.txt to SLURM (4) manually
 concatenate and sort the output vcf files before downstream use.
 
 VCF-files can be merged with vcftools vcf-merge utility or vcflib vcfcombine
-tool (which seems to incorrectly create duplicate sites with differing
-content!). However vcflib vcfcombine consumes a large amount of RAM and is
+tool. However vcflib vcfcombine consumes a large amount of RAM and is
 computationally intensive making merging of large (or large number of) vcf
 files impossible. vcf-merge does not consume much RAM but is even slower.
 
