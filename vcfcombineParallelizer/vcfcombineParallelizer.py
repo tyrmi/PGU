@@ -4,19 +4,34 @@ import os
 import sys
 
 NAME = 'vcfcombineParallelizer'
-VERSION = '17.04.10'
+VERSION = '17.04.11'
 AUTHOR = 'Jaakko Tyrmi'
-descr = """vcflib vcfcombine consumes a large amount of RAM and is
+descr = """
+Usage: (1) Run this script with appropriate parameters (2) edit and submit
+SLURM_1.txt to SLURM (3) edit and submit SLURM_2.txt to SLURM (4) manually
+concatenate and sort the output vcf files before downstream use.
+
+VCF-files can be merged with vcftools vcf-merge utility or vcflib vcfcombine
+tool (which seems to incorrectly create duplicate sites with differing
+content!). However vcflib vcfcombine consumes a large amount of RAM and is
 computationally intensive making merging of large (or large number of) vcf
-files impossible. This program splits vcflib vcfcombine runs into n parts which
-are then run in parallel. This program assumes that SLURM workload manager is
-available for use. The program takes a directory containing multiple vcf files
-to be merged as an input. User selects in how many parts the vcf files should
-be divided to. Notice that reference genome scaffolds are not split, so each
-part consists of one or more scaffolds. This means that when dealing with
-non-fragmented "good quality" reference genomes only relatively low number of
-threads can be generated. Notice that the input vcf files are expected to
-contain all genotype calls (including monomorphic)!
+files impossible. vcf-merge does not consume much RAM but is even slower.
+
+This program splits combine commands into n parts which are then run in
+parallel. This is compatible with both vcftools vcftools and vcflib approach or
+any other software with the following syntax:
+path/to/executable input_1.vcf input_2.vcf ... > output.vcf
+Path to appropriate executable is defined with -l parameter
+(-l path/to/executable).
+
+This program assumes that SLURM workload manager is available for use. The
+program takes a directory containing multiple vcf files to be merged as an
+input. User selects in how many parts the vcf files should be divided to.
+Notice that reference genome scaffolds are not split, so each part consists
+of one or more scaffolds. This means that when dealing with non-fragmented
+"good quality" reference genomes only relatively low number of threads can be
+generated. Notice that the input vcf files are expected to contain all
+genotype calls (including monomorphic)!
 
 Two SLURM array job files are generated: SLURM_1.txt and SLURM_2.txt. The
 first one contains commands for splitting the input vcf files into n parts
@@ -42,17 +57,19 @@ parser.add_option('-j', '--job_name', help='SLURM job name')
 parser.add_option('-v', '--input_vcf_file_dir', help='path to dir containing input vcf files')
 parser.add_option('-r', '--reference_path', help='path to reference genome file (fasta)')
 parser.add_option('-p', '--process_count', help='number of processes to use in parallelization', type=int)
-parser.add_option('-l', '--vcflib_path', help='path to vcflib bin directory')
+parser.add_option('-l', '--vcf_merge_call', help='path to merge executable or a PATH variable (program parameters may be set also with triple underscore characters instead of single whitespaces e.g. vcf-merge___-s___-c___snps)')
 parser.add_option('-t', '--temp_intermediate_dir', help='path to dir for intermediate vcf & bed files')
 parser.add_option('-o', '--output_slurm_files_dir', help='path for slurm files to be created')
 parser.add_option('-d', '--output_final_vcf_dir', help='output path to directory for merged vcf files')
+parser.add_option('-m', '--load_environment_module', help='load an environment module (optional) e.g. -m module___load___mymodule (notice the use of triple underscore characters instead of single whitespace!)')
 
 args = parser.parse_args()[0]
 
 
 def vcfcombineParallelizer(output_final_vcf_dir, reference_path,
-                            process_count, output_slurm_files_dir,
-                            vcf_file_dir, temp_intermediate_dir, job_name, vcflib_path):
+                           process_count, output_slurm_files_dir,
+                           vcf_file_dir, temp_intermediate_dir, job_name,
+                           vcf_merge_call, load_environment_module):
 
     if (output_final_vcf_dir is None
         or reference_path is None
@@ -61,13 +78,16 @@ def vcfcombineParallelizer(output_final_vcf_dir, reference_path,
         or vcf_file_dir is None
         or temp_intermediate_dir is None
         or job_name is None
-        or vcflib_path is None):
+        or vcf_merge_call is None):
         print 'Error! At least one input parameter is missing!'
         sys.exit(0)
 
-    if not os.path.isdir(vcflib_path):
-        print 'Error! -l parameter requires a directory as an input!'
-        sys.exit(1)
+    if load_environment_module is None:
+        load_environment_module = ''
+    else:
+        load_environment_module = load_environment_module.replace('___', ' ')
+
+    vcf_merge_call = vcf_merge_call.replace('___', ' ')
 
     print '\nUsing parameters:'
     print '-r', reference_path
@@ -77,7 +97,8 @@ def vcfcombineParallelizer(output_final_vcf_dir, reference_path,
     print '-b', vcf_file_dir
     print '-t', temp_intermediate_dir
     print '-j', job_name
-    print '-l', vcflib_path
+    print '-l', vcf_merge_call
+    print '-m', load_environment_module
 
     # Open output file in good time to make sure it can be created
     try:
@@ -227,14 +248,11 @@ def vcfcombineParallelizer(output_final_vcf_dir, reference_path,
             out_split_vcf_file_path = os.path.join(temp_intermediate_dir,
                                                    '{0}_{1}'.format(current_split_file_number, vcf_file_name))
             out_handle = open(out_slurm_subscript_path, 'w')
-            out_handle.write('module load biokit\n')
+            out_handle.write('{0}\n'.format(load_environment_module))
             out_handle.write('vcftools --recode --vcf {0} --bed {1} --stdout > {2}\n'
                              .format(vcf_file_path,
                                      bed_file_path,
                                      out_split_vcf_file_path))
-            #out_handle.write('{0} {1} > {2}\n'.format(os.path.join(vcflib_path, 'vcfsort'),
-            #                                        os.path.join(temp_intermediate_dir, out_split_vcf_file_path),
-            #                                        os.path.join(temp_intermediate_dir, out_split_vcf_file_path + '_sorted.vcf')))
             out_handle.write('grep "#" {0} > {1}\n'.format(os.path.join(temp_intermediate_dir, out_split_vcf_file_path),
                                                          os.path.join(temp_intermediate_dir, out_split_vcf_file_path + '_sorted.vcf')))
             out_handle.write('grep -v "#" {0} | sort -k1,1V -k2,2n >> {1}\n'.format(os.path.join(temp_intermediate_dir, out_split_vcf_file_path),
@@ -247,9 +265,10 @@ def vcfcombineParallelizer(output_final_vcf_dir, reference_path,
             files_to_merge.append(os.path.join(temp_intermediate_dir, out_split_vcf_file_path + '_sorted.vcf.gz'))
         out_handle = open(os.path.join(output_slurm_files_dir,
                                        '{0}_merge_subshell.sh'.format(str(current_merge_file_number))),'w')
-        out_handle.write('{0} {1} > {2}'.format(os.path.join(vcflib_path, 'vcfcombine'),
-                                                ' '.join(files_to_merge),
-                                                os.path.join(output_final_vcf_dir, str(current_merge_file_number) + '.vcf')))
+        out_handle.write('{0}\n'.format(load_environment_module))
+        out_handle.write('{0} {1} > {2}\n'.format(vcf_merge_call,
+                                                  ' '.join(files_to_merge),
+                                                  os.path.join(output_final_vcf_dir, str(current_merge_file_number) + '.vcf')))
         out_handle.close()
     print '\nProgram run successful!'
 
@@ -261,4 +280,5 @@ vcfcombineParallelizer(args.output_final_vcf_dir,
                        args.input_vcf_file_dir,
                        args.temp_intermediate_dir,
                        args.job_name,
-                       args.vcflib_path)
+                       args.vcf_merge_call,
+                       args.load_environment_module)
