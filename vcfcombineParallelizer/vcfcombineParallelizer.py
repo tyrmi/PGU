@@ -1,3 +1,32 @@
+'''
+Copyright © 2017 Jaakko Tyrmi. All Rights Reserved.
+
+Redistribution and use in source and binary forms, with or without 
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, 
+this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, 
+this list of conditions and the following disclaimer in the documentation 
+and/or other materials provided with the distribution.
+
+3. The name of the author may not be used to endorse or promote products 
+derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER "AS IS" AND ANY EXPRESS OR 
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO 
+EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, 
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
+BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER 
+IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+POSSIBILITY OF SUCH DAMAGE.
+'''
+
+
 import operator
 import optparse
 import os
@@ -144,7 +173,7 @@ def vcfcombineParallelizer(output_final_vcf_dir, reference_path,
                 reference_sequences[current_scaffold] = seq
                 reference_sequence_sizes[current_scaffold] = len(seq)
                 reference_sequence_order[current_scaffold] = i
-            current_scaffold = line
+            current_scaffold = line.split(' ')[0]
             seq = []
             first_line = False
         else:
@@ -194,6 +223,7 @@ def vcfcombineParallelizer(output_final_vcf_dir, reference_path,
         bed_file_path = os.path.join(temp_intermediate_dir, bed_file_path)
         bed_file_path_list.append(bed_file_path)
         bed_out_handle = open(bed_file_path, 'w')
+        bed_out_handle.write('#CHROM\tSTART\tEND\n')
         for scaffold in scaffold_set:
             bed_out_handle.write('\t'.join(map(str, [scaffold[1:], 0, reference_sequence_sizes[scaffold]])))
             bed_out_handle.write('\n')
