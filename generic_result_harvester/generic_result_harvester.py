@@ -1,5 +1,5 @@
 '''
-Copyright © 2017 Jaakko Tyrmi. All Rights Reserved.
+Copyright 2017 Jaakko Tyrmi. All Rights Reserved.
 
 Redistribution and use in source and binary forms, with or without 
 modification, are permitted provided that the following conditions are met:
@@ -31,15 +31,25 @@ import os
 import sys
 import optparse
 
-VERSION = '17.03.01'
+VERSION = '18.01.03'
 NAME = 'generic_result_harvester'
 AUTHOR = 'Jaakko Tyrmi'
 DESCR = """
 This program can be used to process any number of input files and collect
-specific lines into a single output file.
+specific lines into a single output file. Output is written to stdout if -o
+parameter is not defined.
 
 If you use several conditions for finding line, all of the defined conditions
 must be met for the line to be a match!
+
+By default each condition can take only single value. Multiple alternative 
+values can be defined (with -n, -s, -e and -c options) by giving a path to
+a text file containing an alternative value on each row. For example
+-c /path/to/file.txt
+where file.txt would contain rows:
+im_looking_for_this_string
+or_this
+or_maybe_this
 
 If there are several input files, the output is written into singe output
 file by default. This behaviour can be setting the -m parameter "true".
@@ -64,8 +74,7 @@ parser.add_option('-u', '--search_subdirectories', help='if input path is '
 parser.add_option('-x', '--input_extension', help='open files with this '
                                                   'extension')
 parser.add_option('-o', '--output_path', help='output dir or file path')
-parser.add_option('-n', '--line_number', help='number of line to extract',
-                  type='int')
+parser.add_option('-n', '--line_number', help='number of line to extract')
 parser.add_option('-s', '--line_start', help='beginning of line to extract')
 parser.add_option('-e', '--line_end', help='end of line to extract')
 parser.add_option('-c', '--line_contains', help='line to extract contains')
@@ -79,16 +88,62 @@ parser.add_option('-m', '--multiple_output_files', help='If input is a dir '
 parser.add_option('-f', '--include_file_name', help='includes the input file '
                                                     'name to the output '
                                                     'strings (true/false)')
-
+parser.add_option('-D', '--debug', help='print all sorts of info during runtime (true/false)')
 
 args = parser.parse_args()[0]
 
 
-
-
 def generic_result_harvester(input_path, input_extension, output_path, line_number,
                              line_start, line_end, line_contains, delay,
-                             multiple_output_files, include_file_name, search_subdirectories):
+                             multiple_output_files, include_file_name, search_subdirectories,
+                             debug):
+    if debug is None:
+        debug = False
+    elif debug.lower() == 'false' or debug.lower() == 'f':
+        debug = False
+    elif debug.lower() == 'true' or debug.lower() == 't':
+        debug == True
+    else:
+        sys.stderr.write('Error! Odd value for -D option. Allowed values are "true" and "false"!')
+        sys.exit(0)
+
+    if input_path is None:
+        sys.stderr.write('Error! -i parameter is required!\n')
+        sys.exit(0)
+
+    # Make condition values as lists of strings (and split them if -M parameter has been defined)
+
+    if line_number is not None:
+        if os.path.isfile(line_number):
+            line_number = set(map(int, read_multiple_input_parameters(line_number)))
+        else:
+            line_number = set([int(line_number)])
+    if line_start is not None:
+        if os.path.isfile(line_start):
+            line_start = read_multiple_input_parameters(line_start)
+        else:
+            line_start = [line_start]
+    if line_end is not None:
+        if os.path.isfile(line_end):
+            line_end = read_multiple_input_parameters(line_end)
+        else:
+            line_end = [line_end]
+    if line_contains is not None:
+        if os.path.isfile(line_contains):
+            line_contains = read_multiple_input_parameters(line_contains)
+        else:
+            line_contains = [line_contains]
+
+    if debug:
+        sys.stderr.write('Using search parameters:')
+        sys.stderr.write('-n')
+        sys.stderr.write(str(line_number))
+        sys.stderr.write('-s')
+        sys.stderr.write(str(line_start))
+        sys.stderr.write('-e')
+        sys.stderr.write(str(line_end))
+        sys.stderr.write('-c')
+        sys.stderr.write(str(line_contains))
 
     # Set -d parameter value
     if delay is None:
@@ -101,13 +156,12 @@ def generic_result_harvester(input_path, input_extension, output_path, line_numb
         elif search_subdirectories.lower() in ['f', 'false']:
             search_subdirectories = False
         else:
-            print 'Error! Odd value for -u parameter! Should be "true" or "false"!'
+            sys.stderr.write('Error! Odd value for -u parameter! Should be "true" or "false"!')
             sys.exit(0)
     else:
         search_subdirectories = False
     if search_subdirectories and not os.path.isdir(input_path):
-        print 'Error! -u parameter is available only when input path is a ' \
-              'directory!'
+        sys.stderr.write('Error! -u parameter is available only when input path is a directory!')
         sys.exit(0)
 
     # Check -f parameter value
@@ -117,8 +171,7 @@ def generic_result_harvester(input_path, input_extension, output_path, line_numb
         elif include_file_name.lower() == 'false':
             include_file_name = False
         else:
-            print 'Error! The "--include_file_name" should have a value ' \
-                  'true/false!'
+            sys.stderr.write('Error! The "--include_file_name" should have a value true/false!')
             sys.exit(0)
     else:
         include_file_name = False
@@ -126,47 +179,54 @@ def generic_result_harvester(input_path, input_extension, output_path, line_numb
     # Find & list input files
     if os.path.isfile(input_path):
         input_file_list = [input_path]
-        if os.path.isdir(output_path):
-            print 'Error! Input path is a file, but output path is a directory!'
+        if output_path is not None and os.path.isdir(output_path):
+            sys.stderr.write('Error! Input path is a file, but output path is a directory!')
             sys.exit(1)
     elif os.path.isdir(input_path):
         input_file_list = extract_files_in_dir(input_path, search_subdirectories)
     else:
-        print 'Error! Input path is not a file or a directory:\n{0}'\
-            .format(input_path)
+        sys.stderr.write('Error! Input path is not a file or a directory:\n')
+        sys.stderr.write(str(input_path))
         sys.exit(0)
 
     # Check -m parameter value
     if multiple_output_files is None or multiple_output_files in ['false', 'f']:
         multiple_output_files = False
-        if os.path.exists(output_path):
-            print 'Error! The output file path should be a non existing file, ' \
-                  'when the multiple_output_files argument is set as "false"!'
+        if output_path is not None and os.path.exists(output_path):
+            sys.stderr.write('Error! The output file path should be a non existing file, '
+                  'when the multiple_output_files argument is set as "false"!')
             sys.exit(0)
     elif multiple_output_files.lower() in ['true', 't']:
+        if output_path is None:
+            sys.stderr.write('Error! -m parameter can not be used if -o parameter is omitted!')
+            sys.exit(0)
         multiple_output_files = True
         if not os.path.exists(output_path) or os.path.isfile(output_path):
-            print 'Error! The output file should be an existing directory ' \
-                  'when multiple_output_files argument is set as "true"!'
+            sys.stderr.write('Error! The output file should be an existing directory '
+                  'when multiple_output_files argument is set as "true"!')
             sys.exit(0)
     else:
-        print 'Error! The multiple_output_files argument value contains an ' \
-              'unknown value "{}"! Allowed values are "true" and "false". If ' \
-              'the argument is not defined, "false" will be used as default.'
+        sys.stderr.write('Error! The multiple_output_files argument value contains an unknown value:\n')
+        sys.stderr.write(str(multiple_output_files))
+        sys.stderr.write('Allowed values are "true" and "false". If the argument is not defined, '
+                         '"false" will be used as default.')
         sys.exit(0)
 
     if multiple_output_files and search_subdirectories:
-        print 'Error! -u and -m parameters can not both be true!'
+        sys.stderr.write('Error! -u and -m parameters can not both be true!')
         sys.exit(0)
 
 
     out_lines = []
-    i = 0
+    input_file_number = 0
     for file_path in input_file_list:
         if input_extension:
             if not file_path.endswith(input_extension):
                 continue
 
+        if debug:
+            sys.stderr.write('Starting to read file ')
+            sys.stderr.write(file_path)
         file_handle = open(file_path)
         if include_file_name:
                 file_name_string = file_path + '\t'
@@ -179,53 +239,90 @@ def generic_result_harvester(input_path, input_extension, output_path, line_numb
             j += 1
             line = line.strip()
 
-            # Assume every line is the correct line
-            matching_line = True
+            if debug:
+                if j % 1000000 == 0:
+                    sys.stderr.write('{0}M lines read...\n'.format(j/1000000))
 
-            # Check if any condition is NOT met:
-            if line_number:
-                if j != int(line_number):
-                    matching_line = False
+            matching_line = False
 
-            if line_start:
-                if not line.startswith(line_start):
-                    matching_line = False
+            # Check if any condition is met:
+            if line_number is not None:
+                if j in line_number:
+                    matching_line = True
 
-            if line_end:
-                if not line.endswith(line_end):
-                    matching_line = False
+            if not matching_line and line_start is not None:
+                for ls in line_start:
+                    if line.startswith(ls):
+                        matching_line = True
+                        break
 
-            if line_contains:
-                if line_contains in line:
-                    matching_line = False
+            if not matching_line and line_end is not None:
+                for le in line_end:
+                    if line.endswith(le):
+                        matching_line = True
+                        break
 
-            # Set capture the line
+            if not matching_line and line_contains is not None:
+                for lc in line_contains:
+                    if lc in line:
+                        matching_line = True
+                        break
+
+            # Specify the line number to catch
             if matching_line:
                 line_numbers_to_extract.add(j + delay)
 
+            # Capture the line
             if j in line_numbers_to_extract:
                 out_lines.append(file_name_string + line)
                 matching_lines_found += 1
 
-        if matching_lines_found != 1:
-            print 'WARNING! Weird number of matching lines ({0}) found from ' \
-                  'file:\n{1}'.format(matching_lines_found, file_path)
-
         file_handle.close()
-        i += 1
+        input_file_number += 1
 
         # Write output file if multiple_output_files is true
         if multiple_output_files:
             current_out_path = os.path.join(output_path, file_path)
-            write_output(current_out_path, out_lines, 1)
+            write_output(current_out_path, out_lines)
             out_lines = []
 
     # Write output file if multiple_output_files is false
     if not multiple_output_files:
-        write_output(output_path, out_lines, i)
+        write_output(output_path, out_lines)
+
+    if output_path is not None:
+        sys.stderr.write('{0} matching lines found from {1} files!\n'.format(len(out_lines), input_file_number))
 
 
-def write_output(output_path, out_lines, scanned_files):
+def read_multiple_input_parameters(in_path):
+    """Reads a file containing a list of input parameters
+
+    Exits program if unable to open input file or input file is empty.
+
+    :param
+    in_path: path to a file
+
+    :return: list of parameters read from input file
+    """
+    try:
+        in_handle = open(in_path)
+    except:
+        sys.stderr.write('\n\nError! Unable to open parameter file:\n{0}\n'.format(in_path))
+        sys.stderr.write('Reason:\n\n')
+        raise
+    parameters = []
+    for line in in_handle:
+        line = line.strip()
+        if not line: continue
+        parameters.append(line)
+    if len(parameters) == 0:
+        sys.stderr.write('Error! Parameter file is empty:\n{0}\n'.format(in_path))
+        sys.exit(0)
+
+    return parameters
+
+
+def write_output(output_path, out_lines):
     """Writes the output file
 
     :param
@@ -233,16 +330,17 @@ def write_output(output_path, out_lines, scanned_files):
     out_lines: List of lines to be written,
     scanned_files: Number of input files scanned for this output file.
     """
-    try:
-        output_handle = open(output_path, 'w')
-    except OSError:
-        print 'Error! Unable to open output file:\n{0}'.format(output_path)
-        sys.exit(1)
-    output_handle.write('\n'.join(out_lines))
-    output_handle.close()
-
-    print '{0} matching lines found from {1} files!'.format(len(out_lines),
-                                                            scanned_files)
+    if output_path is not None:
+        try:
+            output_handle = open(output_path, 'w')
+        except OSError:
+            sys.stderr.write('Error! Unable to open output file:\n{0}\n'.format(output_path))
+            sys.exit(1)
+        output_handle.write('\n'.join(out_lines))
+        output_handle.close()
+    else:
+        for line in out_lines:
+            print line
 
 
 def extract_files_in_dir(dir_path, search_subdirectories):
@@ -272,4 +370,5 @@ generic_result_harvester(args.input_path,
                          args.delay,
                          args.multiple_output_files,
                          args.include_file_name,
-                         args.search_subdirectories)
+                         args.search_subdirectories,
+                         args.debug)
