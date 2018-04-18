@@ -136,14 +136,23 @@ def generic_result_harvester(input_path, input_extension, output_path, line_numb
 
     if debug:
         sys.stderr.write('Using search parameters:')
+        sys.stderr.write('\n')
         sys.stderr.write('-n')
+        sys.stderr.write('\n')
         sys.stderr.write(str(line_number))
+        sys.stderr.write('\n')
         sys.stderr.write('-s')
+        sys.stderr.write('\n')
         sys.stderr.write(str(line_start))
+        sys.stderr.write('\n')
         sys.stderr.write('-e')
+        sys.stderr.write('\n')
         sys.stderr.write(str(line_end))
+        sys.stderr.write('\n')
         sys.stderr.write('-c')
+        sys.stderr.write('\n')
         sys.stderr.write(str(line_contains))
+        sys.stderr.write('\n')
 
     # Set -d parameter value
     if delay is None:

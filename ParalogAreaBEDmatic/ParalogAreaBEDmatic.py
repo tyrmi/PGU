@@ -2,7 +2,7 @@ import optparse
 import sys
 
 
-VERSION = '17.04.27'
+VERSION = '18.04.2018'
 NAME = 'ParalogAreaBEDmatic'
 AUTHOR = 'Jaakko Tyrmi'
 DESCRIPTION = """
@@ -25,12 +25,25 @@ parser.add_option('-M', '--max_number_of_heterozygotes', help='maximum number '
 parser.add_option('-r', '--remove_range', help='radius of area where nearby '
                                                'snps are removed', type='int')
 parser.add_option('-g', '--genome_size_file', help='genome size file')
+parser.add_option('-H', '--create_header_line', help='generate a header line to output file (for compatibility with '
+                                                     'some third party software) (def False)')
+
 
 args = parser.parse_args()[0]
 
 
 def ParalogAreaBEDmatic(in_path, out_path, max_number_of_heterozygotes,
-                        remove_range, genome_size_file):
+                        remove_range, genome_size_file, create_header_line):
+
+    if create_header_line is None:
+        create_header_line = False
+    elif create_header_line.lower() == 'false':
+        create_header_line = False
+    elif create_header_line.lower() == 'true':
+        create_header_line = True
+    else:
+        print 'Error! -h parameter value should be "true" or "false"!'
+        sys.exit(0)
 
     if max_number_of_heterozygotes is None:
         max_number_of_heterozygotes = 0
@@ -89,7 +102,7 @@ def ParalogAreaBEDmatic(in_path, out_path, max_number_of_heterozygotes,
                 start = 0
             if end > chr_sizes[scaffold]:
                 end = chr_sizes[scaffold]
-            BED_lines.append('{0}\t{1}\t{2}'.format(scaffold, start, end))
+            BED_lines.append((scaffold, start, end))
 
     in_handle.close()
 
@@ -99,11 +112,49 @@ def ParalogAreaBEDmatic(in_path, out_path, max_number_of_heterozygotes,
     except IOError as err:
         print 'Unable to open output file, reason:\n'.format(err)
         sys.exit(1)
-    out_handle.write('#CHR\tSTART\tEND\n')
-    out_handle.write('\n'.join(BED_lines))
+    if create_header_line:
+        out_handle.write('#CHR\tSTART\tEND\n')
+
+    first_line = True
+    scaffolds_with_paralogous_content = set([])
+    size_of_paralogous_area = 0
+    for line in BED_lines:
+        current_scaffold = line[0]
+        current_start_site = line[1]
+        current_end_site = line[2]
+        # Skip the adjacent area concatenation section below on first line
+        if not first_line:
+            # Concatenate the current area with previous area if they overlap
+            if previous_scaffold == current_scaffold and previous_end_site >= current_start_site:
+                previous_end_site = current_end_site
+            # Otherwise, generate output line with previous area's definition
+            else:
+                scaffolds_with_paralogous_content.add(previous_scaffold)
+                size_of_paralogous_area += previous_end_site - previous_start_site + 1
+                assert previous_start_site < previous_end_site
+                out_handle.write('\t'.join((previous_scaffold, str(previous_start_site), str(previous_end_site))))
+                out_handle.write('\n')
+                previous_scaffold = current_scaffold
+                previous_start_site = current_start_site
+                previous_end_site = current_end_site
+        else:
+            first_line = False
+            previous_scaffold = current_scaffold
+            previous_start_site = current_start_site
+            previous_end_site = current_end_site
+    # Write out the last scaffold
+    if not first_line:
+        scaffolds_with_paralogous_content.add(previous_scaffold)
+        size_of_paralogous_area += previous_end_site - previous_start_site + 1
+        assert previous_start_site < previous_end_site
+        out_handle.write('\t'.join((previous_scaffold, str(previous_start_site), str(previous_end_site))))
+        out_handle.write('\n')
+    out_handle.close()
 
     print '\nProgram run successful!'
-    print '\n{0} paralogous sites found.'.format(number_filtered)
+    print '\nscaffolds containing paralogous sites: {0}'.format(len(scaffolds_with_paralogous_content))
+    print 'paralogous sites found {0}'.format(number_filtered)
+    print 'area marked as paralogous {0}bp'.format(size_of_paralogous_area)
 
 
 def read_genome_size_to_dict(genome_path):
@@ -128,4 +179,4 @@ def read_genome_size_to_dict(genome_path):
 
 ParalogAreaBEDmatic(args.input, args.out_path,
                     args.max_number_of_heterozygotes, args.remove_range,
-                    args.genome_size_file)
+                    args.genome_size_file, args.create_header_line)
